@@ -11,6 +11,26 @@ from .. import text, exception
 from ..cache import cache, memcache
 import hashlib
 
+def GofileFolderExtractorSubDir(folders):
+    directory_fmt = []
+    for l in range(len(folders) + 1):
+        if l == 0:
+            directory_fmt.append("{name} ({code})")
+            continue
+        sub = "folder"
+        for i in range(l-1):
+            sub += "[folder]"
+        directory_fmt.append(f"{{{sub}[name]}} ({{{sub}[code]}})")
+    directory_fmt.append("{category}")
+    directory_fmt.reverse()
+
+    class ret(GofileFolderExtractor):
+        def __init__(self, match):
+            Extractor.__init__(self, match)
+            self.content_id = match[1]
+            self.directory_fmt = tuple(directory_fmt)
+            self.folders = folders
+    return ret
 
 class GofileFolderExtractor(Extractor):
     category = "gofile"
@@ -24,6 +44,7 @@ class GofileFolderExtractor(Extractor):
     def __init__(self, match):
         Extractor.__init__(self, match)
         self.content_id = match[1]
+        self.folders = []
 
     def items(self):
         recursive = self.config("recursive")
@@ -39,6 +60,8 @@ class GofileFolderExtractor(Extractor):
                               self._get_website_token())
 
         folder = self._get_content(self.content_id, password)
+        if len(self.folders) > 0:
+            folder["folder"] = self.folders[-1]
         yield Message.Directory, "", folder
 
         try:
@@ -60,7 +83,7 @@ class GofileFolderExtractor(Extractor):
             elif content["type"] == "folder":
                 if recursive:
                     url = "https://gofile.io/d/" + content["id"]
-                    content["_extractor"] = GofileFolderExtractor
+                    content["_extractor"] = GofileFolderExtractorSubDir(self.folders + [folder])
                     yield Message.Queue, url, content
 
             else:
